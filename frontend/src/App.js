@@ -11,10 +11,16 @@ function App() {
   const [tasks, setTasks] = useState([]);
   const [newUser, setNewUser] = useState({ name: '', email: '' });
   const [newTask, setNewTask] = useState('');
+  const [resumeText, setResumeText] = useState('');
+  const [resumeFile, setResumeFile] = useState(null);
+  const [resumeAnalysis, setResumeAnalysis] = useState(null);
+  const [resumeHistory, setResumeHistory] = useState([]);
+  const [analyzing, setAnalyzing] = useState(false);
 
   useEffect(() => {
     fetchUsers();
     fetchTasks();
+    fetchResumeHistory();
   }, []);
 
   const fetchUsers = async () => {
@@ -84,6 +90,56 @@ function App() {
     }
   };
 
+  const fetchResumeHistory = async () => {
+    try {
+      const response = await axios.get(`${API_URL}/resume/history`);
+      setResumeHistory(response.data);
+    } catch (error) {
+      console.error('Error fetching resume history:', error);
+    }
+  };
+
+  const analyzeResume = async (e) => {
+    e.preventDefault();
+    setAnalyzing(true);
+    
+    try {
+      const formData = new FormData();
+      
+      if (resumeFile) {
+        formData.append('resume', resumeFile);
+      } else if (resumeText.trim()) {
+        formData.append('text', resumeText);
+      } else {
+        alert('Please provide resume text or upload a PDF file');
+        setAnalyzing(false);
+        return;
+      }
+      
+      const response = await axios.post(`${API_URL}/resume/analyze`, formData, {
+        headers: {
+          'Content-Type': 'multipart/form-data'
+        }
+      });
+      
+      setResumeAnalysis(response.data);
+      setResumeText('');
+      setResumeFile(null);
+      fetchResumeHistory();
+    } catch (error) {
+      console.error('Error analyzing resume:', error);
+      alert('Failed to analyze resume');
+    } finally {
+      setAnalyzing(false);
+    }
+  };
+
+  const getScoreColor = (score) => {
+    if (score >= 80) return '#4CAF50';
+    if (score >= 60) return '#FF9800';
+    return '#f44336';
+  };
+
   return (
     <div className="App">
       <header className="App-header">
@@ -92,6 +148,79 @@ function App() {
       </header>
 
       <div className="container">
+        <div className="section">
+          <h2>📄 Resume Analyzer</h2>
+          <form onSubmit={analyzeResume} className="form">
+            <textarea
+              placeholder="Paste your resume text here..."
+              value={resumeText}
+              onChange={(e) => setResumeText(e.target.value)}
+              rows={6}
+              className="resume-textarea"
+            />
+            <div className="file-upload">
+              <label>Or upload PDF:</label>
+              <input
+                type="file"
+                accept=".pdf"
+                onChange={(e) => setResumeFile(e.target.files[0])}
+                className="file-input"
+              />
+            </div>
+            <button type="submit" disabled={analyzing} className="analyze-btn">
+              {analyzing ? 'Analyzing...' : 'Analyze Resume'}
+            </button>
+          </form>
+          
+          {resumeAnalysis && (
+            <div className="analysis-result">
+              <h3>Analysis Results</h3>
+              <div className="score-display">
+                <div className="score-item">
+                  <span>Overall Score:</span>
+                  <span style={{ color: getScoreColor(resumeAnalysis.totalScore) }}>
+                    {resumeAnalysis.totalScore}/100
+                  </span>
+                </div>
+                <div className="score-item">
+                  <span>Grammar Score:</span>
+                  <span style={{ color: getScoreColor(resumeAnalysis.grammarScore) }}>
+                    {resumeAnalysis.grammarScore}/100
+                  </span>
+                </div>
+                <div className="score-item">
+                  <span>Content Score:</span>
+                  <span style={{ color: getScoreColor(resumeAnalysis.contentScore) }}>
+                    {resumeAnalysis.contentScore}/100
+                  </span>
+                </div>
+              </div>
+              
+              {resumeAnalysis.issues.length > 0 && (
+                <div className="issues">
+                  <h4>Issues Found:</h4>
+                  <ul>
+                    {resumeAnalysis.issues.map((issue, index) => (
+                      <li key={index}>{issue}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              
+              {resumeAnalysis.suggestions.length > 0 && (
+                <div className="suggestions">
+                  <h4>Suggestions:</h4>
+                  <ul>
+                    {resumeAnalysis.suggestions.map((suggestion, index) => (
+                      <li key={index}>{suggestion}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
         <div className="section">
           <h2>👥 Users</h2>
           <form onSubmit={addUser} className="form">
